@@ -15,7 +15,7 @@ IMPLEMENT_DYNAMIC(COpenDevDlg, CDialogEx)
 COpenDevDlg::COpenDevDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_DIALOG_OPENDEV, pParent)
 {
-	theApp.m_FilterEn = FALSE;
+	theApp.m_FilterEn = TRUE;
 }
 
 COpenDevDlg::~COpenDevDlg()
@@ -62,6 +62,7 @@ BOOL COpenDevDlg::OnInitDialog()
 
 	m_EditExBgnid.SetLimitLen(3);
 	m_EditExEndid.SetLimitLen(3);
+
 	return TRUE;  // return TRUE unless you set the focus to a control
 				  // 异常: OCX 属性页应返回 FALSE
 }
@@ -149,5 +150,6 @@ void COpenDevDlg::OnBnClickedBtOpendev()
 	}
 
 	MessageBox(_T("Open successful!\n Start CAN OK!"));
+	EndDialog(0);
 
 }

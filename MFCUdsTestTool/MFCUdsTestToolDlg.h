@@ -44,13 +44,23 @@ private:
 
 	BOOL m_CanExt;
 	BOOL m_CanRmt;
+
+public:
+	static UINT UdsMainThread(void *param);
+	static UINT ReceiveThread(void *param);
+	static UINT TransmitCanmsg(BYTE CanData[], BYTE CanDlc);
 public:
 	afx_msg void OnMenuOpendev();
-
 	afx_msg void OnBnClickedCheckRecv();
-
-	//DECLARE_EVENTSINK_MAP()
-
-	static UINT ReceiveThread(void *param);
 	afx_msg void OnBnClickedButtonTx();
+	afx_msg void OnBnClickedButtonClear();
+	afx_msg void OnMenuClosedev();
+	afx_msg void OnMenuRdid();
+	//DECLARE_EVENTSINK_MAP()
+	afx_msg void OnMenuWdid();
+	afx_msg void OnMenuReset();
+	afx_msg void OnMenuDtcon();
+	afx_msg void OnMenuDtcoff();
+	afx_msg void OnMenuRddtc();
+	afx_msg void OnMenuCrdtc();
 };

@@ -6,9 +6,13 @@
 #include "MFCUdsTestTool.h"
 #include "MFCUdsTestToolDlg.h"
 #include "afxdialogex.h"
-#include "OpenDevDlg.h"
 #include "ControlCAN.h"
 #include "UdsUtil.h"
+
+#include "OpenDevDlg.h"
+#include "RdWrDidDlg.h"
+
+#include "UdsClient.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -82,8 +86,17 @@ BEGIN_MESSAGE_MAP(CMFCUdsTestToolDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_COMMAND(ID_MENU_OPENDEV, &CMFCUdsTestToolDlg::OnMenuOpendev)
+	ON_COMMAND(ID_MENU_CLOSEDEV, &CMFCUdsTestToolDlg::OnMenuClosedev)
 	ON_BN_CLICKED(IDC_CHECK_RECV, &CMFCUdsTestToolDlg::OnBnClickedCheckRecv)
 	ON_BN_CLICKED(IDC_BUTTON_TX, &CMFCUdsTestToolDlg::OnBnClickedButtonTx)
+	ON_BN_CLICKED(IDC_BUTTON_CLEAR, &CMFCUdsTestToolDlg::OnBnClickedButtonClear)
+	ON_COMMAND(ID_MENU_RDID, &CMFCUdsTestToolDlg::OnMenuRdid)
+	ON_COMMAND(ID_MENU_WDID, &CMFCUdsTestToolDlg::OnMenuWdid)
+	ON_COMMAND(ID_MENU_RESET, &CMFCUdsTestToolDlg::OnMenuReset)
+	ON_COMMAND(ID_MENU_DTCON, &CMFCUdsTestToolDlg::OnMenuDtcon)
+	ON_COMMAND(ID_MENU_DTCOFF, &CMFCUdsTestToolDlg::OnMenuDtcoff)
+	ON_COMMAND(ID_MENU_RDDTC, &CMFCUdsTestToolDlg::OnMenuRddtc)
+	ON_COMMAND(ID_MENU_CRDTC, &CMFCUdsTestToolDlg::OnMenuCrdtc)
 END_MESSAGE_MAP()
 
 
@@ -148,6 +161,10 @@ BOOL CMFCUdsTestToolDlg::OnInitDialog()
 	m_list.InsertColumn(8, _T("Data"));
 	m_list.SetColumnWidth(8, 160);
 
+
+	uds_client_init();
+	//开启UDS线程
+	AfxBeginThread(UdsMainThread, 0);
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -208,6 +225,19 @@ void CMFCUdsTestToolDlg::OnMenuOpendev()
 	Dlg.DoModal();
 }
 
+void CMFCUdsTestToolDlg::OnMenuClosedev()
+{
+	// TODO: 在此添加命令处理程序代码
+	if (VCI_CloseDevice(VCI_USBCAN2, CAN_DEVINDEX) != 1)
+	{
+		MessageBox(_T("Close failed！"));
+		return;
+
+	}
+
+	MessageBox(_T("Close successful!"));
+}
+
 
 void CMFCUdsTestToolDlg::OnBnClickedCheckRecv()
 {
@@ -223,49 +253,59 @@ void CMFCUdsTestToolDlg::OnBnClickedCheckRecv()
 		StopRecv = 1;
 }
 
-
+UINT CMFCUdsTestToolDlg::UdsMainThread(LPVOID v)
+{
+	while (1)
+	{
+		uds_client_main();
+		Sleep(1);
+	}
+}
 
 UINT CMFCUdsTestToolDlg::ReceiveThread(LPVOID v)
 {
 	CMFCUdsTestToolDlg *dlg = (CMFCUdsTestToolDlg*)AfxGetApp()->GetMainWnd();
-	int k = 0;
+
 	int NumValue;
-	int i;
+	int num = 0;
 	VCI_CAN_OBJ pCanObj[200];
 
-	CString strbuf[200], str1;
-	int num = 0;
+	CString str, str1;
 
 	CSize size;
-	unsigned int JustnowItem;
+	UINT JustnowItem;
 	DWORD ReceivedID;
 
 	size.cx = 0;
 	size.cy = 50;
-	CString str;
-	int Len = 0;
+
 	while (1)
 	{
 
-		//调用动态链接看接收函数
+		//调用动态链接库接收函数
 		NumValue = VCI_Receive(VCI_USBCAN2, CAN_DEVINDEX, theApp.m_CanChnl, pCanObj, 200, 0);
+
 		//接收信息列表显示
-		k++;
 		CString strTime;
-		SYSTEMTIME   systime;
+		SYSTEMTIME systime;
 		GetLocalTime(&systime);
 		strTime.Format(_T("%02d:%02d:%02d:%03d"), systime.wHour, systime.wMinute, systime.wSecond, systime.wMilliseconds);
 
 		for (num = 0; num<NumValue; num++)
 		{
-			/*
+
 			ReceivedID = pCanObj[num].ID;
+
+			/*
 			if (theApp.m_FilterEn)
 			{
 			if (ReceivedID < theApp.m_Bgnid || ReceivedID > theApp.m_Endid)
 			break;
 			}
 			*/
+
+			if (ReceivedID == 0x706)
+				netowrk_recv_frame(0, pCanObj[num].Data, pCanObj[num].DataLen);
 
 			if (nextrow == 59999)
 			{
@@ -298,7 +338,6 @@ UINT CMFCUdsTestToolDlg::ReceiveThread(LPVOID v)
 			}
 			if ((pCanObj[num].ExternFlag) == 1)
 			{
-				ReceivedID = pCanObj[num].ID;
 				str1.Format(_T("%08X"), ReceivedID);
 				dlg->m_list.SetItemText(JustnowItem, 4, str1);	//ID信息	
 
@@ -307,7 +346,6 @@ UINT CMFCUdsTestToolDlg::ReceiveThread(LPVOID v)
 			}
 			else									//标准帧
 			{
-				ReceivedID = pCanObj[num].ID;
 				str1.Format(_T("%04X"), ReceivedID);
 				dlg->m_list.SetItemText(JustnowItem, 4, str1);	//ID信息	
 				dlg->m_list.SetItemText(JustnowItem, 6, _T("Standard"));
@@ -316,6 +354,7 @@ UINT CMFCUdsTestToolDlg::ReceiveThread(LPVOID v)
 			dlg->m_list.SetItemText(JustnowItem, 7, str);
 
 			str = _T("");
+			UINT i;
 			for (i = 0; i<(pCanObj[num].DataLen); i++)	//数据信息
 			{
 				str1.Format(_T("%02X "), pCanObj[num].Data[i]);
@@ -336,10 +375,104 @@ UINT CMFCUdsTestToolDlg::ReceiveThread(LPVOID v)
 	return 1;
 }
 
+
+UINT CMFCUdsTestToolDlg::TransmitCanmsg(BYTE CanData[], BYTE CanDlc)
+{
+	CMFCUdsTestToolDlg *dlg = (CMFCUdsTestToolDlg*)AfxGetApp()->GetMainWnd();
+
+	VCI_CAN_OBJ sendbuf[1];
+	BYTE can_id[10] = { 0 };
+	int FrameFormat, FrameType;
+	UINT i;
+
+	FrameFormat = FRMFMT_STD;
+	FrameType = FRMTYP_DAT;
+
+
+	sendbuf->ExternFlag = FrameType;
+	sendbuf->DataLen = CanDlc;
+	sendbuf->RemoteFlag = FrameFormat;
+	if (FrameFormat == 1)//if remote frame, data area is invalid
+		for (i = 0; i<CanDlc; i++)
+			CanData[i] = 0;
+
+	sendbuf->ID = 0x766; // theApp.m_Phyid;
+
+	for (i = 0; i<CanDlc; i++)
+		sendbuf->Data[i] = CanData[i];
+	/****************************************************************************/
+	/******************************从界面获取发送信息完毕***********************/
+	/****************************************************************************/
+	int flag;
+	//调用动态链接库发送函数
+	flag = VCI_Transmit(VCI_USBCAN2, CAN_DEVINDEX, theApp.m_CanChnl, sendbuf, 1);//CAN message send
+	if (flag<1)
+		return 0;
+
+
+	CSize size;
+	UINT JustnowItem;
+	BYTE data;
+
+	//发送信息列表显示
+	CString strTime;
+	SYSTEMTIME   systime;
+	GetLocalTime(&systime);
+	strTime.Format(_T("%02d:%02d:%02d:%03d"), systime.wHour, systime.wMinute, systime.wSecond, systime.wMilliseconds);
+
+
+	size.cx = 0;
+	size.cy = 50;
+	CString str;
+	CString str1;
+	str.Format(_T("%d"), nextrow);
+	dlg->m_list.ItemColorFlag[nextrow] = 1;
+	JustnowItem = dlg->m_list.InsertItem(nextrow, str);
+
+	nextrow++;
+	dlg->m_list.SetItemText(JustnowItem, 1, strTime);
+	str.Format(_T("%d"), theApp.m_CanChnl);
+	dlg->m_list.SetItemText(JustnowItem, 2, str);
+	dlg->m_list.SetItemText(JustnowItem, 3, _T("Send"));
+	str = _T("");
+
+	if ((sendbuf->RemoteFlag) == 1)
+	{
+		dlg->m_list.SetItemText(JustnowItem, 5, _T("Remote"));
+	}
+	else
+	{
+		dlg->m_list.SetItemText(JustnowItem, 5, _T("Data"));
+	}
+
+	str.Format(_T("%02X"), sendbuf->ID);
+
+	dlg->m_list.SetItemText(JustnowItem, 4, str);
+	//dlg->m_list.SetItemText(JustnowItem, 6, _T("Extended"));
+
+	dlg->m_list.SetItemText(JustnowItem, 6, _T("Standard"));
+
+	str.Format(_T("%d"), sendbuf->DataLen);
+	dlg->m_list.SetItemText(JustnowItem, 7, str);
+
+	str = _T("");
+	for (i = 0; i<sendbuf->DataLen; i++)
+	{
+		data = sendbuf->Data[i];
+		str1.Format(_T("%02X"), data);
+		str = (str + str1 + _T(" "));
+	}
+	dlg->m_list.SetItemText(JustnowItem, 8, str);
+	dlg->m_list.Scroll(size);
+	//发送信息列表显示完毕
+
+	return CanDlc;
+}
+
 void CMFCUdsTestToolDlg::OnBnClickedButtonTx()
 {
 	// TODO: 在此添加控件通知处理程序代码
-	UpdateData(true);//更新控件数据
+	UpdateData(TRUE);//更新控件数据
 
 					 //从界面获取发送信息
 	VCI_CAN_OBJ sendbuf[1];
@@ -368,10 +501,8 @@ void CMFCUdsTestToolDlg::OnBnClickedButtonTx()
 	temp_len = UdsUtil::str2char(m_EditCanid, temp_buf) - 1;
 	UdsUtil::str2HEX(temp_buf, can_id);
 
-	newflag = 1;
-
 	temp_len = UdsUtil::str2char(m_Editcantx, temp_buf) - 1;
-
+	newflag = 1;
 	for (i = 0; i<temp_len; i++)
 	{
 		temp_char = temp_buf[i];
@@ -402,7 +533,6 @@ void CMFCUdsTestToolDlg::OnBnClickedButtonTx()
 				if (datanum >= 8)
 					break;
 			}
-
 		}
 	}
 	sendbuf->ExternFlag = FrameType;
@@ -438,7 +568,7 @@ void CMFCUdsTestToolDlg::OnBnClickedButtonTx()
 	}
 
 	CSize size;
-	unsigned int JustnowItem;
+	UINT JustnowItem;
 	BYTE data;
 
 	//发送信息列表显示
@@ -508,4 +638,96 @@ void CMFCUdsTestToolDlg::OnBnClickedButtonTx()
 	m_list.SetItemText(JustnowItem, 8, str);
 	m_list.Scroll(size);
 	//发送信息列表显示完毕
+}
+
+
+void CMFCUdsTestToolDlg::OnBnClickedButtonClear()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	m_list.DeleteAllItems();
+	UpdateData(FALSE);//更新数据
+}
+
+
+void CMFCUdsTestToolDlg::OnMenuRdid()
+{
+	// TODO: 在此添加命令处理程序代码
+	CRdWrDidDlg  Dlg;
+	Dlg.RdWr = Dlg.EmRd;
+	Dlg.DoModal();
+}
+
+
+
+void CMFCUdsTestToolDlg::OnMenuWdid()
+{
+	// TODO: 在此添加命令处理程序代码
+	CRdWrDidDlg  Dlg;
+	Dlg.RdWr = Dlg.EmWr;
+	Dlg.DoModal();
+}
+
+
+void CMFCUdsTestToolDlg::OnMenuReset()
+{
+	// TODO: 在此添加命令处理程序代码
+	BYTE RstBuf[BUF_LEN];
+	UINT RstLen = 1;
+
+	RstBuf[0] = 0x01;
+
+	uds_client_request(SID_11, RstBuf, RstLen);
+}
+
+
+
+void CMFCUdsTestToolDlg::OnMenuDtcon()
+{
+	// TODO: 在此添加命令处理程序代码
+	BYTE CmdBuf[BUF_LEN];
+	UINT CmdLen = 1;
+
+	CmdBuf[0] = 0x01;
+
+	uds_client_request(SID_85, CmdBuf, CmdLen);
+}
+
+
+void CMFCUdsTestToolDlg::OnMenuDtcoff()
+{
+	// TODO: 在此添加命令处理程序代码
+	BYTE CmdBuf[BUF_LEN];
+	UINT CmdLen = 1;
+
+	CmdBuf[0] = 0x02;
+
+	uds_client_request(SID_85, CmdBuf, CmdLen);
+}
+
+
+void CMFCUdsTestToolDlg::OnMenuRddtc()
+{
+	// TODO: 在此添加命令处理程序代码
+	BYTE CmdBuf[BUF_LEN];
+	UINT CmdLen = 1;
+
+	//ReportSupportedDTC
+	CmdBuf[0] = 0x0A;
+
+	uds_client_request(SID_19, CmdBuf, CmdLen);
+}
+
+
+void CMFCUdsTestToolDlg::OnMenuCrdtc()
+{
+	// TODO: 在此添加命令处理程序代码
+	BYTE CmdBuf[BUF_LEN];
+	UINT CmdLen = 3;
+
+	//All Group
+	CmdBuf[0] = 0xFF;
+	CmdBuf[1] = 0xFF;
+	CmdBuf[2] = 0xFF;
+
+	uds_client_request(SID_14, CmdBuf, CmdLen);
 }

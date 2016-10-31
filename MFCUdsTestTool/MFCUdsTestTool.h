@@ -20,6 +20,10 @@ class CMFCUdsTestToolApp : public CWinApp
 public:
 	CMFCUdsTestToolApp();
 
+	UINT m_Phyid;
+	UINT m_Fucid;
+	UINT m_Rspid;
+
 	UINT m_Bgnid;
 	UINT m_Endid;
 	BOOL m_FilterEn;

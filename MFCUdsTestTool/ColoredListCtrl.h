@@ -18,12 +18,15 @@ public:
 
 // Attributes
 public:
+	enum { EmCol0 = 0, EmCol1 = 1, EmCol2 = 2, EmCol3 = 3};
+	COLORREF m_colRow0;
 	COLORREF m_colRow1;
 	COLORREF m_colRow2;
-
+	COLORREF m_colRow3;
 // Operations
 public:
 	unsigned char ItemColorFlag[60000];
+	unsigned char ItemTextColor[60000];
 	
 // Overrides
 	// ClassWizard generated virtual function overrides

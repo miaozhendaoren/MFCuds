@@ -48,6 +48,21 @@
     <ClInclude Include="ColoredListCtrl.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="RdWrData.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="UdsClient.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="NetworkLayerPrivate.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="NetworkLayer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RdWrDidDlg.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MFCUdsTestTool.cpp">
@@ -69,6 +84,18 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="ColoredListCtrl.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RdWrData.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="UdsClient.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="NetworkLayer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RdWrDidDlg.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
