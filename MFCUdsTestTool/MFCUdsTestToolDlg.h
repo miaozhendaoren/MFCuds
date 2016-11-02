@@ -5,6 +5,11 @@
 #pragma once
 #include "ColoredListCtrl.h"
 #include "afxwin.h"
+#include "CanCommDlg.h"
+#include "UdsDiagDlg.h"
+#include "UdsCcDlg.h"
+
+#include "ControlCAN.h"
 
 // CMFCUdsTestToolDlg 对话框
 class CMFCUdsTestToolDlg : public CDialogEx
@@ -35,25 +40,22 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 private:
+	CTabCtrl m_Table;
 	CMenu m_Menu;
-	CColoredListCtrl m_list;
-	BOOL m_CanRxEn;
+	CColoredListCtrl *m_List;
 
-	CString m_Editcantx;
-	CString m_EditCanid;
-
-	BOOL m_CanExt;
-	BOOL m_CanRmt;
+	int m_CurSelTab;
+	CCanCommDlg m_CanComm;
+	CUdsDiagDlg m_UdsDiag;
+	CDialog* pDialog[2];  //用来保存对话框对象指针
 
 public:
+	static INT TransmitCanmsg(VCI_CAN_OBJ *SendObj);
 	static UINT UdsMainThread(void *param);
 	static UINT ReceiveThread(void *param);
-	static UINT TransmitCanmsg(BYTE CanData[], BYTE CanDlc);
-public:
+
+	afx_msg void OnBnClickedBtOpendev();
 	afx_msg void OnMenuOpendev();
-	afx_msg void OnBnClickedCheckRecv();
-	afx_msg void OnBnClickedButtonTx();
-	afx_msg void OnBnClickedButtonClear();
 	afx_msg void OnMenuClosedev();
 	afx_msg void OnMenuRdid();
 	//DECLARE_EVENTSINK_MAP()
@@ -63,4 +65,7 @@ public:
 	afx_msg void OnMenuDtcoff();
 	afx_msg void OnMenuRddtc();
 	afx_msg void OnMenuCrdtc();
+	afx_msg void OnTcnSelchangeTabMain(NMHDR *pNMHDR, LRESULT *pResult);
+	afx_msg void OnMenuCc();
+	afx_msg void OnMenuUdsconf();
 };

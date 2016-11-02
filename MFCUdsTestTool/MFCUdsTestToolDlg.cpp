@@ -8,18 +8,18 @@
 #include "afxdialogex.h"
 #include "ControlCAN.h"
 #include "UdsUtil.h"
+#include "UdsClient.h"
 
 #include "OpenDevDlg.h"
 #include "RdWrDidDlg.h"
+#include "UdsDiagDlg.h"
+#include "CanCommDlg.h"
+#include "UdsConfDlg.h"
 
-#include "UdsClient.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
-
-unsigned long nextrow;
-UINT StopRecv = 0;
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -62,20 +62,12 @@ CMFCUdsTestToolDlg::CMFCUdsTestToolDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(IDD_MFCUDSTESTTOOL_DIALOG, pParent)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
-
-	m_CanRxEn = FALSE;
-	m_CanExt = FALSE;
-	m_CanRmt = FALSE;
 }
 
 void CMFCUdsTestToolDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
-	DDX_Control(pDX, IDC_LIST_CANMSG, m_list);
-	DDX_Check(pDX, IDC_CHECK_RECV, m_CanRxEn);
-
-	DDX_Text(pDX, IDC_EDIT_CANTX, m_Editcantx);
-	DDX_Text(pDX, IDC_EDIT_CANID, m_EditCanid);
+	DDX_Control(pDX, IDC_TAB_MAIN, m_Table);
 
 	//DDX_Radio(pDX, IDC_RADIO_EXT, m_CanExt);
 	//DDX_Radio(pDX, IDC_RADIO_RMT, m_CanRmt);
@@ -85,11 +77,9 @@ BEGIN_MESSAGE_MAP(CMFCUdsTestToolDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
+	ON_COMMAND(IDC_BT_OPENDEV, &CMFCUdsTestToolDlg::OnBnClickedBtOpendev)
 	ON_COMMAND(ID_MENU_OPENDEV, &CMFCUdsTestToolDlg::OnMenuOpendev)
 	ON_COMMAND(ID_MENU_CLOSEDEV, &CMFCUdsTestToolDlg::OnMenuClosedev)
-	ON_BN_CLICKED(IDC_CHECK_RECV, &CMFCUdsTestToolDlg::OnBnClickedCheckRecv)
-	ON_BN_CLICKED(IDC_BUTTON_TX, &CMFCUdsTestToolDlg::OnBnClickedButtonTx)
-	ON_BN_CLICKED(IDC_BUTTON_CLEAR, &CMFCUdsTestToolDlg::OnBnClickedButtonClear)
 	ON_COMMAND(ID_MENU_RDID, &CMFCUdsTestToolDlg::OnMenuRdid)
 	ON_COMMAND(ID_MENU_WDID, &CMFCUdsTestToolDlg::OnMenuWdid)
 	ON_COMMAND(ID_MENU_RESET, &CMFCUdsTestToolDlg::OnMenuReset)
@@ -97,6 +87,9 @@ BEGIN_MESSAGE_MAP(CMFCUdsTestToolDlg, CDialogEx)
 	ON_COMMAND(ID_MENU_DTCOFF, &CMFCUdsTestToolDlg::OnMenuDtcoff)
 	ON_COMMAND(ID_MENU_RDDTC, &CMFCUdsTestToolDlg::OnMenuRddtc)
 	ON_COMMAND(ID_MENU_CRDTC, &CMFCUdsTestToolDlg::OnMenuCrdtc)
+	ON_NOTIFY(TCN_SELCHANGE, IDC_TAB_MAIN, &CMFCUdsTestToolDlg::OnTcnSelchangeTabMain)
+	ON_COMMAND(ID_MENU_CC, &CMFCUdsTestToolDlg::OnMenuCc)
+	ON_COMMAND(ID_MENU_UDSCONF, &CMFCUdsTestToolDlg::OnMenuUdsconf)
 END_MESSAGE_MAP()
 
 
@@ -137,34 +130,39 @@ BOOL CMFCUdsTestToolDlg::OnInitDialog()
 	m_Menu.LoadMenu(IDR_MENU1);
 	SetMenu(&m_Menu);
 
-	m_EditCanid = _T("766");
-	GetDlgItem(IDC_EDIT_CANID)->SetWindowText(m_EditCanid);
+	//为Table control 增加页面
+	m_Table.InsertItem(0, _T("通讯"));
+	m_Table.InsertItem(1, _T("诊断"));
+
+	//创建对话框
+	m_CanComm.Create(IDD_DIALOG_COM, &m_Table);
+	m_UdsDiag.Create(IDD_DIALOG_DIAG, &m_Table);
 
 
+	//设定在Table内显示的范围
+	CRect rc;
+	m_Table.GetClientRect(rc);
+	rc.top += 23;
+	rc.bottom -= 0;
+	rc.left += 0;
+	rc.right -= 0;
+	m_CanComm.MoveWindow(&rc);
+	m_UdsDiag.MoveWindow(&rc);
 
-	m_list.InsertColumn(0, _T("Seq"));
-	m_list.SetColumnWidth(0, 40);
-	m_list.InsertColumn(1, _T("Time"));
-	m_list.SetColumnWidth(1, 85);
-	m_list.InsertColumn(2, _T("CANIndex"));
-	m_list.SetColumnWidth(2, 60);
-	m_list.InsertColumn(3, _T("Tx-Rx"));
-	m_list.SetColumnWidth(3, 60);
-	m_list.InsertColumn(4, _T(" ID "));
-	m_list.SetColumnWidth(4, 60);
-	m_list.InsertColumn(5, _T("Frame"));
-	m_list.SetColumnWidth(5, 50);
-	m_list.InsertColumn(6, _T("Type"));
-	m_list.SetColumnWidth(6, 70);
-	m_list.InsertColumn(7, _T("DLC"));
-	m_list.SetColumnWidth(7, 30);
-	m_list.InsertColumn(8, _T("Data"));
-	m_list.SetColumnWidth(8, 160);
+	//把对话框对象指针保存起来
+	pDialog[0] = &m_CanComm;
+	pDialog[1] = &m_UdsDiag;
+	//显示初始页面
+	pDialog[0]->ShowWindow(SW_SHOW);
+	pDialog[1]->ShowWindow(SW_HIDE);
+	//保存当前选择
+	m_CurSelTab = 0;
 
-
-	uds_client_init();
+	//开启接收线程
+	AfxBeginThread(ReceiveThread, 0);
 	//开启UDS线程
-	AfxBeginThread(UdsMainThread, 0);
+	AfxBeginThread(UdsMainThread, &theApp.UdsClient);
+
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -217,6 +215,12 @@ HCURSOR CMFCUdsTestToolDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
+void CMFCUdsTestToolDlg::OnBnClickedBtOpendev()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	COpenDevDlg  Dlg;
+	Dlg.DoModal();
+}
 
 void CMFCUdsTestToolDlg::OnMenuOpendev()
 {
@@ -237,417 +241,6 @@ void CMFCUdsTestToolDlg::OnMenuClosedev()
 
 	MessageBox(_T("Close successful!"));
 }
-
-
-void CMFCUdsTestToolDlg::OnBnClickedCheckRecv()
-{
-	// TODO: 在此添加控件通知处理程序代码
-	UpdateData(TRUE);
-	if (m_CanRxEn)
-	{
-		StopRecv = 0;
-		//开启接收线程
-		AfxBeginThread(ReceiveThread, 0);
-	}
-	else
-		StopRecv = 1;
-}
-
-UINT CMFCUdsTestToolDlg::UdsMainThread(LPVOID v)
-{
-	while (1)
-	{
-		uds_client_main();
-		Sleep(1);
-	}
-}
-
-UINT CMFCUdsTestToolDlg::ReceiveThread(LPVOID v)
-{
-	CMFCUdsTestToolDlg *dlg = (CMFCUdsTestToolDlg*)AfxGetApp()->GetMainWnd();
-
-	int NumValue;
-	int num = 0;
-	VCI_CAN_OBJ pCanObj[200];
-
-	CString str, str1;
-
-	CSize size;
-	UINT JustnowItem;
-	DWORD ReceivedID;
-
-	size.cx = 0;
-	size.cy = 50;
-
-	while (1)
-	{
-
-		//调用动态链接库接收函数
-		NumValue = VCI_Receive(VCI_USBCAN2, CAN_DEVINDEX, theApp.m_CanChnl, pCanObj, 200, 0);
-
-		//接收信息列表显示
-		CString strTime;
-		SYSTEMTIME systime;
-		GetLocalTime(&systime);
-		strTime.Format(_T("%02d:%02d:%02d:%03d"), systime.wHour, systime.wMinute, systime.wSecond, systime.wMilliseconds);
-
-		for (num = 0; num<NumValue; num++)
-		{
-
-			ReceivedID = pCanObj[num].ID;
-
-			/*
-			if (theApp.m_FilterEn)
-			{
-			if (ReceivedID < theApp.m_Bgnid || ReceivedID > theApp.m_Endid)
-			break;
-			}
-			*/
-
-			if (ReceivedID == 0x706)
-				netowrk_recv_frame(0, pCanObj[num].Data, pCanObj[num].DataLen);
-
-			if (nextrow == 59999)
-			{
-				dlg->m_list.DeleteAllItems();
-				nextrow = 0;
-			}
-
-			dlg->m_list.ItemColorFlag[nextrow] = 0;
-
-			str.Format(_T("%d"), nextrow);
-			JustnowItem = dlg->m_list.InsertItem(nextrow, str);
-			nextrow++;
-
-			dlg->m_list.SetItemText(JustnowItem, 1, strTime);
-
-			str.Format(_T("%d"), theApp.m_CanChnl);
-			dlg->m_list.SetItemText(JustnowItem, 2, str);
-
-			dlg->m_list.SetItemText(JustnowItem, 3, _T("Receive"));
-			str = _T("");
-
-			if ((pCanObj[num].RemoteFlag) == 1)
-			{
-				dlg->m_list.SetItemText(JustnowItem, 5, _T("Remote"));
-			}
-			else
-			{
-				dlg->m_list.SetItemText(JustnowItem, 5, _T("Data"));
-
-			}
-			if ((pCanObj[num].ExternFlag) == 1)
-			{
-				str1.Format(_T("%08X"), ReceivedID);
-				dlg->m_list.SetItemText(JustnowItem, 4, str1);	//ID信息	
-
-				dlg->m_list.SetItemText(JustnowItem, 6, _T("Extended"));
-
-			}
-			else									//标准帧
-			{
-				str1.Format(_T("%04X"), ReceivedID);
-				dlg->m_list.SetItemText(JustnowItem, 4, str1);	//ID信息	
-				dlg->m_list.SetItemText(JustnowItem, 6, _T("Standard"));
-			}
-			str.Format(_T("%d"), pCanObj[num].DataLen);	//长度信息
-			dlg->m_list.SetItemText(JustnowItem, 7, str);
-
-			str = _T("");
-			UINT i;
-			for (i = 0; i<(pCanObj[num].DataLen); i++)	//数据信息
-			{
-				str1.Format(_T("%02X "), pCanObj[num].Data[i]);
-				str += str1;
-			}
-
-			dlg->m_list.SetItemText(JustnowItem, 8, str);
-			dlg->m_list.Scroll(size);
-			//接收信息列表显示完毕
-		}
-
-		Sleep(5);
-
-		if (StopRecv == 1)
-			return 0;
-	}
-
-	return 1;
-}
-
-
-UINT CMFCUdsTestToolDlg::TransmitCanmsg(BYTE CanData[], BYTE CanDlc)
-{
-	CMFCUdsTestToolDlg *dlg = (CMFCUdsTestToolDlg*)AfxGetApp()->GetMainWnd();
-
-	VCI_CAN_OBJ sendbuf[1];
-	BYTE can_id[10] = { 0 };
-	int FrameFormat, FrameType;
-	UINT i;
-
-	FrameFormat = FRMFMT_STD;
-	FrameType = FRMTYP_DAT;
-
-
-	sendbuf->ExternFlag = FrameType;
-	sendbuf->DataLen = CanDlc;
-	sendbuf->RemoteFlag = FrameFormat;
-	if (FrameFormat == 1)//if remote frame, data area is invalid
-		for (i = 0; i<CanDlc; i++)
-			CanData[i] = 0;
-
-	sendbuf->ID = 0x766; // theApp.m_Phyid;
-
-	for (i = 0; i<CanDlc; i++)
-		sendbuf->Data[i] = CanData[i];
-	/****************************************************************************/
-	/******************************从界面获取发送信息完毕***********************/
-	/****************************************************************************/
-	int flag;
-	//调用动态链接库发送函数
-	flag = VCI_Transmit(VCI_USBCAN2, CAN_DEVINDEX, theApp.m_CanChnl, sendbuf, 1);//CAN message send
-	if (flag<1)
-		return 0;
-
-
-	CSize size;
-	UINT JustnowItem;
-	BYTE data;
-
-	//发送信息列表显示
-	CString strTime;
-	SYSTEMTIME   systime;
-	GetLocalTime(&systime);
-	strTime.Format(_T("%02d:%02d:%02d:%03d"), systime.wHour, systime.wMinute, systime.wSecond, systime.wMilliseconds);
-
-
-	size.cx = 0;
-	size.cy = 50;
-	CString str;
-	CString str1;
-	str.Format(_T("%d"), nextrow);
-	dlg->m_list.ItemColorFlag[nextrow] = 1;
-	JustnowItem = dlg->m_list.InsertItem(nextrow, str);
-
-	nextrow++;
-	dlg->m_list.SetItemText(JustnowItem, 1, strTime);
-	str.Format(_T("%d"), theApp.m_CanChnl);
-	dlg->m_list.SetItemText(JustnowItem, 2, str);
-	dlg->m_list.SetItemText(JustnowItem, 3, _T("Send"));
-	str = _T("");
-
-	if ((sendbuf->RemoteFlag) == 1)
-	{
-		dlg->m_list.SetItemText(JustnowItem, 5, _T("Remote"));
-	}
-	else
-	{
-		dlg->m_list.SetItemText(JustnowItem, 5, _T("Data"));
-	}
-
-	str.Format(_T("%02X"), sendbuf->ID);
-
-	dlg->m_list.SetItemText(JustnowItem, 4, str);
-	//dlg->m_list.SetItemText(JustnowItem, 6, _T("Extended"));
-
-	dlg->m_list.SetItemText(JustnowItem, 6, _T("Standard"));
-
-	str.Format(_T("%d"), sendbuf->DataLen);
-	dlg->m_list.SetItemText(JustnowItem, 7, str);
-
-	str = _T("");
-	for (i = 0; i<sendbuf->DataLen; i++)
-	{
-		data = sendbuf->Data[i];
-		str1.Format(_T("%02X"), data);
-		str = (str + str1 + _T(" "));
-	}
-	dlg->m_list.SetItemText(JustnowItem, 8, str);
-	dlg->m_list.Scroll(size);
-	//发送信息列表显示完毕
-
-	return CanDlc;
-}
-
-void CMFCUdsTestToolDlg::OnBnClickedButtonTx()
-{
-	// TODO: 在此添加控件通知处理程序代码
-	UpdateData(TRUE);//更新控件数据
-
-					 //从界面获取发送信息
-	VCI_CAN_OBJ sendbuf[1];
-	BYTE hex_str[32];
-	BYTE hex_buf[50];
-	BYTE data_buf[50];
-	BYTE can_id[10] = { 0 };
-
-	BYTE temp_char;
-	BYTE temp_buf[50];
-	LONG temp_len;
-
-	int datanum = 0, IDnum = 0, newflag = 1, i;
-	int FrameFormat, FrameType;
-
-	if (m_CanExt == 0)
-		FrameFormat = FRMFMT_STD;
-	else
-		FrameFormat = FRMFMT_EXT;
-
-	if (m_CanRmt == 0)
-		FrameType = FRMTYP_DAT;
-	else
-		FrameType = FRMTYP_RMT;
-
-	temp_len = UdsUtil::str2char(m_EditCanid, temp_buf) - 1;
-	UdsUtil::str2HEX(temp_buf, can_id);
-
-	temp_len = UdsUtil::str2char(m_Editcantx, temp_buf) - 1;
-	newflag = 1;
-	for (i = 0; i<temp_len; i++)
-	{
-		temp_char = temp_buf[i];
-		if (temp_char == ' ')
-		{
-			newflag = 1;
-		}
-		else
-		{
-			if (newflag == 1)
-			{
-				newflag = 0;
-				hex_str[0] = temp_char;
-				hex_str[1] = 0;
-				hex_str[2] = 0;
-			}
-			else
-			{
-				newflag = 1;
-				hex_str[1] = temp_char;
-				hex_str[2] = 0;
-			}
-
-			if (newflag == 1 || temp_buf[i + 1] == ' ')
-			{
-				UdsUtil::str2HEX(hex_str, hex_buf);
-				data_buf[datanum++] = hex_buf[0];
-				if (datanum >= 8)
-					break;
-			}
-		}
-	}
-	sendbuf->ExternFlag = FrameType;
-	sendbuf->DataLen = datanum;
-	sendbuf->RemoteFlag = FrameFormat;
-	if (FrameFormat == 1)//if remote frame, data area is invalid
-		for (i = 0; i<datanum; i++)
-			data_buf[i] = 0;
-
-	sendbuf->ID = 0;
-	sendbuf->ID |= (UINT)can_id[0] << 8;
-	sendbuf->ID |= (UINT)can_id[1] << 0;
-
-
-	for (i = 0; i<datanum; i++)
-		sendbuf->Data[i] = data_buf[i];
-	/****************************************************************************/
-	/******************************从界面获取发送信息完毕***********************/
-	/****************************************************************************/
-	int flag;
-
-
-	//调用动态链接库发送函数
-	flag = VCI_Transmit(VCI_USBCAN2, CAN_DEVINDEX, theApp.m_CanChnl, sendbuf, 1);//CAN message send
-	if (flag<1)
-	{
-		if (flag == -1)
-			MessageBox(_T("failed- device not open\n"));
-		else if (flag == 0)
-			MessageBox(_T("send error\n"));
-		return;
-
-	}
-
-	CSize size;
-	UINT JustnowItem;
-	BYTE data;
-
-	//发送信息列表显示
-	CString strTime;
-	SYSTEMTIME   systime;
-	GetLocalTime(&systime);
-	strTime.Format(_T("%02d:%02d:%02d:%03d"), systime.wHour, systime.wMinute, systime.wSecond, systime.wMilliseconds);
-
-
-	size.cx = 0;
-	size.cy = 50;
-	CString str;
-	CString str1;
-	str.Format(_T("%d"), nextrow);
-	m_list.ItemColorFlag[nextrow] = 1;
-	JustnowItem = m_list.InsertItem(nextrow, str);
-
-	nextrow++;
-	m_list.SetItemText(JustnowItem, 1, strTime);
-	str.Format(_T("%d"), theApp.m_CanChnl);
-	m_list.SetItemText(JustnowItem, 2, str);
-	m_list.SetItemText(JustnowItem, 3, _T("Send"));
-	str = _T("");
-
-	if ((sendbuf->RemoteFlag) == 1)
-	{
-		m_list.SetItemText(JustnowItem, 5, _T("Remote"));
-	}
-	else
-	{
-		m_list.SetItemText(JustnowItem, 5, _T("Data"));
-	}
-	if ((sendbuf->ExternFlag) == 1)
-	{
-		for (i = 0; i<4; i++)
-		{
-			data = can_id[i];
-			str1.Format(_T("%02X"), data);
-			str += str1;
-		}
-		m_list.SetItemText(JustnowItem, 4, str);
-		m_list.SetItemText(JustnowItem, 6, _T("Extended"));
-	}
-	else
-	{
-		for (i = 0; i<2; i++)
-		{
-
-			data = can_id[i];
-			str1.Format(_T("%02X"), data);
-			str += str1;
-		}
-		m_list.SetItemText(JustnowItem, 4, str);
-
-		m_list.SetItemText(JustnowItem, 6, _T("Standard"));
-	}
-	str.Format(_T("%d"), sendbuf->DataLen);
-	m_list.SetItemText(JustnowItem, 7, str);
-
-	str = _T("");
-	for (i = 0; i<sendbuf->DataLen; i++)
-	{
-		data = sendbuf->Data[i];
-		str1.Format(_T("%02X"), data);
-		str = (str + str1 + _T(" "));
-	}
-	m_list.SetItemText(JustnowItem, 8, str);
-	m_list.Scroll(size);
-	//发送信息列表显示完毕
-}
-
-
-void CMFCUdsTestToolDlg::OnBnClickedButtonClear()
-{
-	// TODO: 在此添加控件通知处理程序代码
-	m_list.DeleteAllItems();
-	UpdateData(FALSE);//更新数据
-}
-
 
 void CMFCUdsTestToolDlg::OnMenuRdid()
 {
@@ -676,7 +269,7 @@ void CMFCUdsTestToolDlg::OnMenuReset()
 
 	RstBuf[0] = 0x01;
 
-	uds_client_request(SID_11, RstBuf, RstLen);
+	theApp.UdsClient.request(SID_11, RstBuf, RstLen);
 }
 
 
@@ -689,7 +282,7 @@ void CMFCUdsTestToolDlg::OnMenuDtcon()
 
 	CmdBuf[0] = 0x01;
 
-	uds_client_request(SID_85, CmdBuf, CmdLen);
+	theApp.UdsClient.request(SID_85, CmdBuf, CmdLen);
 }
 
 
@@ -701,7 +294,7 @@ void CMFCUdsTestToolDlg::OnMenuDtcoff()
 
 	CmdBuf[0] = 0x02;
 
-	uds_client_request(SID_85, CmdBuf, CmdLen);
+	theApp.UdsClient.request(SID_85, CmdBuf, CmdLen);
 }
 
 
@@ -714,7 +307,7 @@ void CMFCUdsTestToolDlg::OnMenuRddtc()
 	//ReportSupportedDTC
 	CmdBuf[0] = 0x0A;
 
-	uds_client_request(SID_19, CmdBuf, CmdLen);
+	theApp.UdsClient.request(SID_19, CmdBuf, CmdLen);
 }
 
 
@@ -729,5 +322,108 @@ void CMFCUdsTestToolDlg::OnMenuCrdtc()
 	CmdBuf[1] = 0xFF;
 	CmdBuf[2] = 0xFF;
 
-	uds_client_request(SID_14, CmdBuf, CmdLen);
+	theApp.UdsClient.request(SID_14, CmdBuf, CmdLen);
 }
+
+
+void CMFCUdsTestToolDlg::OnMenuCc()
+{
+	// TODO: 在此添加命令处理程序代码
+	CUdsCcDlg  Dlg;
+	Dlg.DoModal();
+}
+
+
+void CMFCUdsTestToolDlg::OnMenuUdsconf()
+{
+	// TODO: 在此添加命令处理程序代码
+	CUdsConfDlg  Dlg;
+	Dlg.DoModal();
+}
+
+void CMFCUdsTestToolDlg::OnTcnSelchangeTabMain(NMHDR *pNMHDR, LRESULT *pResult)
+{
+	// TODO: 在此添加控件通知处理程序代码
+	//把当前的页面隐藏起来
+	pDialog[m_CurSelTab]->ShowWindow(SW_HIDE);
+	//得到新的页面索引
+	m_CurSelTab = m_Table.GetCurSel();
+	//把新的页面显示出来
+	pDialog[m_CurSelTab]->ShowWindow(SW_SHOW);
+
+	*pResult = 0;
+}
+
+
+INT CMFCUdsTestToolDlg::TransmitCanmsg(VCI_CAN_OBJ *SendObj)
+{
+	CMFCUdsTestToolDlg *dlg = (CMFCUdsTestToolDlg*)AfxGetApp()->GetMainWnd();
+
+	INT flag;
+	//调用动态链接库发送函数
+	flag = VCI_Transmit(VCI_USBCAN2, CAN_DEVINDEX, theApp.m_CanChnl, SendObj, 1);//CAN message send
+
+	if (flag < 1)
+	{
+		return flag;
+	}
+
+	dlg->m_CanComm.InsertItem(1, SendObj);
+	return flag;
+}
+
+UINT CMFCUdsTestToolDlg::UdsMainThread(LPVOID v)
+{
+	CUdsClient *pObj = (CUdsClient *)v;
+	while (1)
+	{
+		pObj->main_loop();
+		Sleep(1);
+	}
+}
+
+UINT CMFCUdsTestToolDlg::ReceiveThread(LPVOID v)
+{
+	CMFCUdsTestToolDlg *dlg = (CMFCUdsTestToolDlg*)AfxGetApp()->GetMainWnd();
+
+	INT NumValue;
+	INT num = 0;
+	VCI_CAN_OBJ pCanObj[200];
+
+	CString str, str1;
+
+	CSize size;
+	UINT JustnowItem;
+	DWORD ReceivedID;
+
+	size.cx = 0;
+	size.cy = 50;
+
+	while (1)
+	{
+
+		//调用动态链接库接收函数
+		NumValue = VCI_Receive(VCI_USBCAN2, CAN_DEVINDEX, theApp.m_CanChnl, pCanObj, 200, 0);
+
+		//接收信息列表显示
+		CString strTime;
+		SYSTEMTIME systime;
+		GetLocalTime(&systime);
+		strTime.Format(_T("%02d:%02d:%02d:%03d"), systime.wHour, systime.wMinute, systime.wSecond, systime.wMilliseconds);
+
+		for (num = 0; num<NumValue; num++)
+		{
+
+			ReceivedID = pCanObj[num].ID;
+
+			if (ReceivedID == theApp.m_Rspid)
+				theApp.UdsClient.netowrk_recv_frame(0, pCanObj[num].Data, pCanObj[num].DataLen);
+			dlg->m_CanComm.InsertItem(0, pCanObj);
+		}
+
+		Sleep(5);
+	}
+
+	return 1;
+}
+

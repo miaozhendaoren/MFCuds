@@ -5,8 +5,37 @@
 #include "MFCUdsTestTool.h"
 #include "RdWrDidDlg.h"
 #include "afxdialogex.h"
-#include "RdWrData.h"
 #include "UdsClient.h"
+#include "UdsUtil.h"
+
+// Read/Write Did date
+BYTE ASC_boot_ver[10];
+BYTE uds_session;
+BYTE ASC_sys_supplier_id[5];
+BYTE ASC_soft_ver[10];
+BYTE ASC_sys_name[10];
+BYTE ASC_ecu_part_num[15];
+BYTE BCD_manufacture_date[3];
+BYTE HEX_ecu_sn[10];
+BYTE ASC_VIN[17];
+BYTE HEX_tester_sn[10];
+BYTE BCD_program_date[3];
+
+
+const uds_rwdata_t rwdata_list[RWDATA_CNT] =
+{
+	{ _T("BootVer"),    0xF183, ASC_boot_ver,         10, UDS_RWDATA_RDONLY,      UDS_RWDATA_DFLASH },
+	{ _T("UdsSession"), 0xF186, &uds_session,         1,  UDS_RWDATA_RDONLY,      UDS_RWDATA_RAM },
+	{ _T("EcuPartNUm"), 0xF187, ASC_ecu_part_num,     15, UDS_RWDATA_RDWR_INBOOT, UDS_RWDATA_EEPROM },
+	{ _T("SupplierId"), 0xF18A, ASC_sys_supplier_id,  5,  UDS_RWDATA_RDONLY,      UDS_RWDATA_DFLASH },
+	{ _T("ManuDate"),   0xF18B, BCD_manufacture_date, 3,  UDS_RWDATA_RDONLY,      UDS_RWDATA_EEPROM }, /* be writen after manufacture */
+	{ _T("EcuSn"),      0xF18C, HEX_ecu_sn,           10, UDS_RWDATA_RDONLY,      UDS_RWDATA_EEPROM }, /* be writen after manufacture */
+	{ _T("VIN"),        0xF190, ASC_VIN,              17, UDS_RWDATA_RDWR_WRONCE, UDS_RWDATA_EEPROM }, /* be writen after installment */
+	{ _T("SoftVer"),    0xF195, ASC_soft_ver,         10, UDS_RWDATA_RDONLY,      UDS_RWDATA_DFLASH },
+	{ _T("SysName"),    0xF197, ASC_sys_name,         10, UDS_RWDATA_RDONLY,      UDS_RWDATA_DFLASH },
+	{ _T("TesterSn"),   0xF198, HEX_tester_sn,        10, UDS_RWDATA_RDWR_INBOOT, UDS_RWDATA_EEPROM }, /* update by tester after program */
+	{ _T("ProgDate"),   0xF199, BCD_program_date,     3,  UDS_RWDATA_RDWR_INBOOT, UDS_RWDATA_EEPROM } /* update by tester after program */
+};
 
 // CReadDidDlg 对话框
 
@@ -65,10 +94,10 @@ BOOL CRdWrDidDlg::OnInitDialog()
 	CString str;
 	CString str1;
 
-
 	nItem = -1;
 	nSubItem = -1;
 	SetTim = FALSE;
+	GetInput = FALSE;
 
 	::ShowWindow(::GetDlgItem(m_hWnd, IDC_EDIT_RDWRDID), SW_HIDE);
 
@@ -121,13 +150,18 @@ BOOL CRdWrDidDlg::OnInitDialog()
 void CRdWrDidDlg::OnBnClickedBtRddid()
 {
 	// TODO: 在此添加控件通知处理程序代码
+
 	BYTE SesBuf[BUF_LEN];
 	BYTE DidBuf[BUF_LEN];
 	UINT DidLen;
 	UINT listrow = 0;
 
-	DidLen = 0;
 
+	SesBuf[0] = 0x03;
+	theApp.UdsClient.request(SID_10, SesBuf, 1);
+	Sleep(50);
+
+	DidLen = 0;
 	if (RdWr == EmRd)
 	{
 		for (listrow = 0; listrow < RWDATA_CNT; listrow++)
@@ -137,7 +171,7 @@ void CRdWrDidDlg::OnBnClickedBtRddid()
 				DidBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 8);
 				DidBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 0);
 
-				uds_client_request(SID_22, DidBuf, DidLen);
+				theApp.UdsClient.request(SID_22, DidBuf, DidLen);
 				SetTimer(1, 100, NULL);
 				SetTim = TRUE;
 				break;
@@ -158,10 +192,8 @@ void CRdWrDidDlg::OnBnClickedBtRddid()
 				{
 					DidBuf[DidLen++] = rwdata_list[listrow].p_data[i];
 				}
-				SesBuf[0] = 0x03;
-				uds_client_request(SID_10, SesBuf, 1);
-				Sleep(50);
-				uds_client_request(SID_2E, DidBuf, DidLen);
+
+				theApp.UdsClient.request(SID_2E, DidBuf, DidLen);
 				SetTimer(1, 100, NULL);
 				SetTim = TRUE;
 				break;
@@ -187,7 +219,8 @@ void CRdWrDidDlg::OnTimer(UINT_PTR nIDEvent)
 
 	if (SetTim == TRUE)
 	{
-		readlen = uds_get_rsp(DataBuf, BUF_LEN);
+		SetTim = FALSE;
+		readlen = theApp.UdsClient.get_rsp(DataBuf, BUF_LEN);
 
 		if (RdWr == EmRd)
 		{
@@ -227,7 +260,6 @@ void CRdWrDidDlg::OnTimer(UINT_PTR nIDEvent)
 			if (readlen > 0)
 				MessageBox(_T("write did get response\n"));
 		}
-		SetTim = FALSE;
 	}
 
 	CDialogEx::OnTimer(nIDEvent);
@@ -276,8 +308,9 @@ void CRdWrDidDlg::OnNMDblclkListRdid(NMHDR *pNMHDR, LRESULT *pResult)
 		nItem = pNMItemActivate->iItem;
 		//get the column number
 		nSubItem = pNMItemActivate->iSubItem;
-		if (nSubItem != 3 || nItem == -1)
+		if (nSubItem != 3 || nItem == -1 || rwdata_list[nItem].rw_mode == UDS_RWDATA_RDONLY)
 			return;
+		GetInput = TRUE;
 		//Retrieve the text of the selected subItem 
 		//from the list
 		CString str = GetItemText(hWnd1, nItem,
@@ -355,8 +388,9 @@ void CRdWrDidDlg::OnNMClickListRdwrdid(NMHDR *pNMHDR, LRESULT *pResult)
 	//get the column number
 	mSubItem = pNMItemActivate->iSubItem;
 
-	if ((nItem == mItem && nSubItem == mSubItem))
-		return;
+	if (GetInput == FALSE) return;
+	GetInput = FALSE;
+
 
 	CString str;
 	//get the text from the EditBox
@@ -399,4 +433,61 @@ void CRdWrDidDlg::SetCell(HWND hWnd1, CString value, int nRow, int nCol)
 	else
 		//Insert the value into List
 		ListView_InsertItem(hWnd1, &lvItem);
+}
+
+INT CRdWrDidDlg::uds_input_wdidlist(UINT did_n, CString str)
+{
+	BYTE hex_str[32];
+	BYTE hex_buf[50];
+	BYTE data_buf[50];
+
+	BYTE temp_char;
+	BYTE temp_buf[50];
+	LONG temp_len;
+
+	int datanum = 0, newflag = 1, i;
+
+	if (did_n >= RWDATA_CNT) return -1;
+
+	temp_len = UdsUtil::str2char(str, temp_buf) - 1;
+	newflag = 1;
+	for (i = 0; i < temp_len; i++)
+	{
+		temp_char = temp_buf[i];
+		if (temp_char == ' ')
+		{
+			newflag = 1;
+		}
+		else
+		{
+			if (newflag == 1)
+			{
+				newflag = 0;
+				hex_str[0] = temp_char;
+				hex_str[1] = 0;
+				hex_str[2] = 0;
+			}
+			else
+			{
+				newflag = 1;
+				hex_str[1] = temp_char;
+				hex_str[2] = 0;
+			}
+
+			if (newflag == 1 || temp_buf[i + 1] == ' ')
+			{
+				UdsUtil::str2HEX(hex_str, hex_buf);
+				data_buf[datanum++] = hex_buf[0];
+			}
+		}
+	}
+
+	memset(rwdata_list[did_n].p_data, 0, rwdata_list[did_n].dlc);
+
+	for (i = 0; i < datanum && i < rwdata_list[did_n].dlc; i++)
+	{
+		rwdata_list[did_n].p_data[i] = data_buf[i];
+	}
+
+	return 0;
 }

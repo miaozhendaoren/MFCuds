@@ -6,7 +6,7 @@
 #endif // _MSC_VER > 1000
 // ColoredListCtrl.h : header file
 //
-extern unsigned long int nextrow;
+extern int nextrow;
 /////////////////////////////////////////////////////////////////////////////
 // CColoredListCtrl window
 

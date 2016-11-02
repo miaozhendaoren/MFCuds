@@ -13,6 +13,7 @@
 Include Files
 *******************************************************************************/
 #include "afxwin.h"
+#include "NetworkLayerPrivate.h"
 
 typedef enum _N_TATYPE_T_
 {
@@ -35,76 +36,78 @@ typedef enum _N_RESULT_
 	N_ERROR
 }n_result_t;
 
-typedef void
-(*ffindication_func) (WORD msg_dlc);
-typedef void
-(*indication_func) (BYTE msg_buf[], WORD msg_dlc, n_result_t n_result);
-typedef void
-(*confirm_func) (n_result_t n_result);
-
-typedef struct _NETWORK_USER_DATA_T_
-{
-	ffindication_func ffindication;
-	indication_func indication;
-	confirm_func    confirm;
-}nt_usdata_t;
 
 /*******************************************************************************
 external Varaibles
 *******************************************************************************/
-extern BYTE g_tatype;
-
-/*******************************************************************************
-Function  Definition
-*******************************************************************************/
 
 
-/**
-* network_main - network main task, should be schedule every one ms
-*
-* @void
-*
-* returns:
-*     void
-*/
-extern void
-network_main(void);
 
-/**
-* netowrk_recv_frame - recieved uds network can frame
-*
-* @func_addr : 0 - physical addr, 1 - functional addr
-* @frame_buf : uds can frame data buffer
-* @frame_dlc : uds can frame length
-*
-* returns:
-*     void
-*/
-extern void
-netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE frame_dlc);
+class CUdsNetwork
+{
+public:
+	CUdsNetwork();
+	~CUdsNetwork();
 
-/**
-* netowrk_send_udsmsg - send a uds msg by can
-*
-* @msg_buf : uds msg data buffer
-* @msg_dlc : uds msg length
-*
-* returns:
-*     void
-*/
-extern void
-netowrk_send_udsmsg(BYTE msg_buf[], WORD msg_dlc);
+private:
+	/*******************************************************************************
+	Global Varaibles
+	*******************************************************************************/
+	network_layer_st nwl_st;
 
+	BOOL g_wait_cf;
+	BOOL g_wait_fc;
 
-/**
-* netowrk_reg_usdata - reg usdata Function
-*
-* @usdata : uds msg data Function struct
-*
-* returns:
-*     0 - ok, other - err
-*/
-extern int
-netowrk_reg_usdata(nt_usdata_t usdata);
+	UINT nt_timer[TIMER_CNT];
+
+	BYTE g_rfc_stmin;    /* received flowcontrol SeparationTime */
+	BYTE g_rfc_bs;       /* received flowcontrol block size */
+
+	BYTE g_xcf_bc;       /* transmit consecutive frame block counter */
+	BYTE g_xcf_sn;       /* transmit consecutive frame SequenceNumber */
+	BYTE g_rcf_bc;       /* received frame block counter */
+	BYTE g_rcf_sn;       /* received consecutive frame SequenceNumber */
+
+									/* transmit buffer */
+	BYTE remain_buf[UDS_FF_DL_MAX];
+	WORD remain_len;
+	WORD remain_pos;
+
+	/* recieve buffer */
+	BYTE recv_buf[UDS_FF_DL_MAX];
+	WORD recv_len;
+    WORD recv_fdl;  /* frame data len */
+
+public:
+	BYTE g_tatype;
+
+private:
+	void nt_timer_start(BYTE num);
+	void nt_timer_start_wv(BYTE num, UINT value);
+	void nt_timer_stop(BYTE num);
+	int nt_timer_run(BYTE num);
+	int nt_timer_chk(BYTE num);
+	void clear_network(void);
+	void recv_singleframe(BYTE frame_buf[], BYTE frame_dlc);
+	int recv_firstframe(BYTE frame_buf[], BYTE frame_dlc);
+	int recv_consecutiveframe(BYTE frame_buf[], BYTE frame_dlc);
+	int recv_flowcontrolframe(BYTE frame_buf[], BYTE frame_dlc);
+	void send_flowcontrol(BYTE flow_st);
+	void send_singleframe(BYTE msg_buf[], WORD msg_dlc);
+	int send_firstframe(BYTE msg_buf[], WORD msg_dlc);
+	int send_consecutiveframe(BYTE msg_buf[], WORD msg_dlc, BYTE frame_sn);
+	void send_multipleframe(BYTE msg_buf[], WORD msg_dlc);
+
+protected:
+	virtual void ZTai_UDS_Send(BYTE CanData[], BYTE CanDlc) = 0;
+	virtual void N_USData_ffindication(WORD msg_dlc) = 0;
+	virtual void N_USData_indication(BYTE msg_buf[], WORD msg_dlc, n_result_t n_result) = 0;
+	virtual void N_USData_confirm(n_result_t n_result) = 0;
+
+public:
+    void network_main(void);
+	void netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE frame_dlc);
+	void netowrk_send_udsmsg(BYTE msg_buf[], WORD msg_dlc);
+};
 
 /****************EOF****************/

@@ -56,13 +56,35 @@ typedef enum __UDS_SA_LV__
 Function  Definition
 *******************************************************************************/
 
-extern void
-uds_client_main(void);
+class CUdsClient : public CUdsNetwork
+{
+public:
+	CUdsClient();
+	~CUdsClient();
 
-extern int
-uds_client_init(void);
+private:
+	BYTE RspData[BUF_LEN];
+	UINT RspDlc;
+	BOOL GetRsp;
+	BYTE ReqSid;
+	BYTE RspSid;
 
-extern void
-uds_client_request(BYTE SvcId, BYTE DidBuf[], UINT DidLen);
+	/* uds user layer timer */
+	UINT uds_timer[UDS_TIMER_CNT];
 
-UINT uds_get_rsp(BYTE DataBuf[], UINT BufLen);
+private:
+	void uds_timer_start(BYTE num);
+	void uds_timer_stop(BYTE num);
+	int uds_timer_run(BYTE num);
+	int uds_timer_chk(BYTE num);
+
+protected:
+	void ZTai_UDS_Send(BYTE CanData[], BYTE CanDlc);
+	void N_USData_ffindication(WORD msg_dlc);
+	void N_USData_indication(BYTE msg_buf[], WORD msg_dlc, n_result_t n_result);
+	void N_USData_confirm(n_result_t n_result);
+public:
+    void main_loop(void);
+	void request(BYTE SvcId, BYTE DidBuf[], UINT DidLen);
+	UINT get_rsp(BYTE DataBuf[], UINT BufLen);
+};

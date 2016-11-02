@@ -7,66 +7,47 @@
 \description   uds network code, base on ISO 15765
 *******************************************************************************/
 #include "stdafx.h"
-//#include "afxdialogex.h"
-#include "MFCUdsTestToolDlg.h"
-
 #include "NetworkLayerPrivate.h"
 #include "NetworkLayer.h"
-#include "ControlCan.h"
+
 
 /*******************************************************************************
 Type Definition
 *******************************************************************************/
 
-/*******************************************************************************
-Global Varaibles
-*******************************************************************************/
-static network_layer_st nwl_st = NWL_IDLE;
 
-static BOOL g_wait_cf = FALSE;
-static BOOL g_wait_fc = FALSE;
-
-static UINT nt_timer[TIMER_CNT] = { 0 };
-
-static BYTE g_rfc_stmin = 0;    /* received flowcontrol SeparationTime */
-static BYTE g_rfc_bs = 0;       /* received flowcontrol block size */
-
-static BYTE g_xcf_bc = 0;       /* transmit consecutive frame block counter */
-static BYTE g_xcf_sn = 0;       /* transmit consecutive frame SequenceNumber */
-static BYTE g_rcf_bc = 0;       /* received frame block counter */
-static BYTE g_rcf_sn = 0;       /* received consecutive frame SequenceNumber */
-
-								   /* transmit buffer */
-static BYTE remain_buf[UDS_FF_DL_MAX];
-static WORD remain_len = 0;
-static WORD remain_pos = 0;
-
-/* recieve buffer */
-static BYTE recv_buf[UDS_FF_DL_MAX];
-static WORD recv_len = 0;
-static WORD recv_fdl = 0;  /* frame data len */
 
 /*******************************************************************************
-external Varaibles
+Function Constructor Destructor
 *******************************************************************************/
-BYTE g_tatype;
-/*******************************************************************************
-Function  declaration
-*******************************************************************************/
-static void
-send_flowcontrol(BYTE flow_st);
-
-//static indication_func uds_indication = NULL;
-//static confirm_func uds_confirm = NULL;
-
-static nt_usdata_t N_USData = { NULL, NULL };
-/*******************************************************************************
-Function  Definition - common
-*******************************************************************************/
-
-void ZTai_UDS_Send(BYTE data_buf[], BYTE data_len)
+CUdsNetwork::CUdsNetwork()
 {
-	CMFCUdsTestToolDlg::TransmitCanmsg(data_buf, data_len);
+	nwl_st = NWL_IDLE;
+
+	g_wait_cf = FALSE;
+	g_wait_fc = FALSE;
+
+	for (int i = 0; i < TIMER_CNT; i++)
+	    nt_timer[i] = 0;
+
+	g_rfc_stmin = 0;    /* received flowcontrol SeparationTime */
+	g_rfc_bs = 0;       /* received flowcontrol block size */
+
+	g_xcf_bc = 0;       /* transmit consecutive frame block counter */
+	g_xcf_sn = 0;       /* transmit consecutive frame SequenceNumber */
+	g_rcf_bc = 0;       /* received frame block counter */
+	g_rcf_sn = 0;       /* received consecutive frame SequenceNumber */
+
+	remain_len = 0;
+	remain_pos = 0;
+
+	recv_len = 0;
+	recv_fdl = 0;
+}
+
+
+CUdsNetwork::~CUdsNetwork()
+{
 }
 
 /**
@@ -77,8 +58,7 @@ void ZTai_UDS_Send(BYTE data_buf[], BYTE data_len)
 * returns:
 *     void
 */
-static void
-nt_timer_start(BYTE num)
+void CUdsNetwork::nt_timer_start(BYTE num)
 {
 	if (num >= TIMER_CNT) return;
 
@@ -90,8 +70,7 @@ nt_timer_start(BYTE num)
 		nt_timer[TIMER_STmin] = g_rfc_stmin;
 }
 
-static void
-nt_timer_start_wv(BYTE num, UINT value)
+void CUdsNetwork::nt_timer_start_wv(BYTE num, UINT value)
 {
 	if (num >= TIMER_CNT) return;
 
@@ -103,8 +82,7 @@ nt_timer_start_wv(BYTE num, UINT value)
 		nt_timer[TIMER_STmin] = value;
 }
 
-static void
-nt_timer_stop(BYTE num)
+void CUdsNetwork::nt_timer_stop(BYTE num)
 {
 	if (num >= TIMER_CNT) return;
 
@@ -119,8 +97,7 @@ nt_timer_stop(BYTE num)
 * returns:
 *     0 - timer is not running, 1 - timer is running, -1 - a timeout occur
 */
-static int
-nt_timer_run(BYTE num)
+int CUdsNetwork::nt_timer_run(BYTE num)
 {
 	if (num >= TIMER_CNT) return 0;
 
@@ -150,8 +127,7 @@ nt_timer_run(BYTE num)
 * returns:
 *     0 - timer is not running, 1 - timer is running,
 */
-static int
-nt_timer_chk(BYTE num)
+int CUdsNetwork::nt_timer_chk(BYTE num)
 {
 	if (num >= TIMER_CNT) return 0;
 
@@ -176,8 +152,7 @@ nt_timer_chk(BYTE num)
 * returns:
 *     void
 */
-static void
-clear_network(void)
+void CUdsNetwork::clear_network(void)
 {
 	BYTE num;
 	nwl_st = NWL_IDLE;
@@ -204,8 +179,7 @@ Function  Definition - recieve
 * returns:
 *     void
 */
-static void
-recv_singleframe(BYTE frame_buf[], BYTE frame_dlc)
+void CUdsNetwork::recv_singleframe(BYTE frame_buf[], BYTE frame_dlc)
 {
 	WORD i, uds_dlc;
 	BYTE service_id;
@@ -229,7 +203,7 @@ recv_singleframe(BYTE frame_buf[], BYTE frame_dlc)
 		recv_buf[i] = frame_buf[1 + i];
 	recv_len = frame_dlc - 1;
 
-	N_USData.indication(recv_buf, recv_fdl, N_OK);
+	N_USData_indication(recv_buf, recv_fdl, N_OK);
 }
 /**
 * recv_firstframe - recieved a firt frame from CAN
@@ -241,8 +215,7 @@ recv_singleframe(BYTE frame_buf[], BYTE frame_dlc)
 * returns:
 *     0 - recv a right frame, other - err
 */
-static int
-recv_firstframe(BYTE frame_buf[], BYTE frame_dlc)
+int CUdsNetwork::recv_firstframe(BYTE frame_buf[], BYTE frame_dlc)
 {
 	WORD i;
 	BYTE service_id;
@@ -288,7 +261,7 @@ recv_firstframe(BYTE frame_buf[], BYTE frame_dlc)
 	/* claer the consecutive frane0 sn */
 	g_rcf_sn = 0;
 
-	N_USData.ffindication(uds_dlc);
+	N_USData_ffindication(uds_dlc);
 
 	return 1;
 }
@@ -303,8 +276,7 @@ recv_firstframe(BYTE frame_buf[], BYTE frame_dlc)
 * returns:
 *     0 - recv end, 1 - recv continue, other - err
 */
-static int
-recv_consecutiveframe(BYTE frame_buf[], BYTE frame_dlc)
+int CUdsNetwork::recv_consecutiveframe(BYTE frame_buf[], BYTE frame_dlc)
 {
 	BYTE cf_sn;
 	WORD i;
@@ -317,7 +289,7 @@ recv_consecutiveframe(BYTE frame_buf[], BYTE frame_dlc)
 	if (g_rcf_sn > 0x0f)
 		g_rcf_sn = 0;
 	if (g_rcf_sn != cf_sn) {
-		N_USData.indication(recv_buf, recv_len, N_WRONG_SN);
+		N_USData_indication(recv_buf, recv_len, N_WRONG_SN);
 		return -2;
 	}
 
@@ -330,7 +302,7 @@ recv_consecutiveframe(BYTE frame_buf[], BYTE frame_dlc)
 	if (recv_len >= recv_fdl)
 	{
 		g_wait_cf = FALSE;
-		N_USData.indication(recv_buf, recv_fdl, N_OK);
+		N_USData_indication(recv_buf, recv_fdl, N_OK);
 		return 0;
 	}
 	else
@@ -365,8 +337,7 @@ recv_consecutiveframe(BYTE frame_buf[], BYTE frame_dlc)
 * returns:
 *     0 - recv CTS, 1 - recv WT, other - err
 */
-static int
-recv_flowcontrolframe(BYTE frame_buf[], BYTE frame_dlc)
+int CUdsNetwork::recv_flowcontrolframe(BYTE frame_buf[], BYTE frame_dlc)
 {
 	BYTE fc_fs;
 
@@ -381,12 +352,12 @@ recv_flowcontrolframe(BYTE frame_buf[], BYTE frame_dlc)
 
 	g_wait_fc = FALSE;
 	if (fc_fs >= FS_RESERVED) {
-		N_USData.confirm(N_INVALID_FS);
+		N_USData_confirm(N_INVALID_FS);
 		return -2;
 	}
 
 	if (fc_fs == FS_OVFLW) {
-		N_USData.confirm(N_BUFFER_OVFLW);
+		N_USData_confirm(N_BUFFER_OVFLW);
 		return -3;
 	}
 
@@ -425,8 +396,7 @@ Function  Definition - send
 * returns:
 *     void
 */
-static void
-send_flowcontrol(BYTE flow_st)
+void CUdsNetwork::send_flowcontrol(BYTE flow_st)
 {
 	BYTE send_buf[UDS_VALID_FRAME_LEN] = { 0 };
 	send_buf[0] = NT_SET_PCI_TYPE_FC(flow_st);
@@ -445,8 +415,7 @@ send_flowcontrol(BYTE flow_st)
 * returns:
 *     void
 */
-static void
-send_singleframe(BYTE msg_buf[], WORD msg_dlc)
+void CUdsNetwork::send_singleframe(BYTE msg_buf[], WORD msg_dlc)
 {
 	WORD i;
 	BYTE send_buf[UDS_VALID_FRAME_LEN] = { 0 };
@@ -472,8 +441,7 @@ send_singleframe(BYTE msg_buf[], WORD msg_dlc)
 * returns:
 *     int
 */
-static int
-send_firstframe(BYTE msg_buf[], WORD msg_dlc)
+int CUdsNetwork::send_firstframe(BYTE msg_buf[], WORD msg_dlc)
 {
 	WORD i;
 	BYTE send_buf[UDS_VALID_FRAME_LEN] = { 0 };
@@ -507,8 +475,7 @@ send_firstframe(BYTE msg_buf[], WORD msg_dlc)
 * returns:
 *     int
 */
-static int
-send_consecutiveframe(BYTE msg_buf[], WORD msg_dlc, BYTE frame_sn)
+int CUdsNetwork::send_consecutiveframe(BYTE msg_buf[], WORD msg_dlc, BYTE frame_sn)
 {
 	WORD i;
 	BYTE send_buf[UDS_VALID_FRAME_LEN] = { 0 };
@@ -535,8 +502,7 @@ send_consecutiveframe(BYTE msg_buf[], WORD msg_dlc, BYTE frame_sn)
 * returns:
 *     void
 */
-static void
-send_multipleframe(BYTE msg_buf[], WORD msg_dlc)
+void CUdsNetwork::send_multipleframe(BYTE msg_buf[], WORD msg_dlc)
 {
 	WORD i;
 	BYTE send_len;
@@ -564,19 +530,18 @@ Function  Definition - external API
 * returns:
 *     void
 */
-extern void
-network_main(void)
+void CUdsNetwork::network_main(void)
 {
 	BYTE send_len;
 	if (nt_timer_run(TIMER_N_CR) < 0)
 	{
 		clear_network();
-		N_USData.indication(recv_buf, recv_len, N_TIMEOUT_Cr);
+		N_USData_indication(recv_buf, recv_len, N_TIMEOUT_Cr);
 	}
 	if (nt_timer_run(TIMER_N_BS) < 0)
 	{
 		clear_network();
-		N_USData.confirm(N_TIMEOUT_Bs);
+		N_USData_confirm(N_TIMEOUT_Bs);
 	}
 
 	if (nt_timer_run(TIMER_STmin) < 0)
@@ -627,8 +592,7 @@ network_main(void)
 * returns:
 *     void
 */
-extern void
-netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE frame_dlc)
+void CUdsNetwork::netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE frame_dlc)
 {
 
 	BYTE pci_type; /* protocol control information type */
@@ -654,7 +618,7 @@ netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE frame_dlc)
 		{
 			clear_network();
 			if (nwl_st == NWL_RECV)
-				N_USData.indication(recv_buf, recv_len, N_UNEXP_PDU);
+				N_USData_indication(recv_buf, recv_len, N_UNEXP_PDU);
 			recv_singleframe(frame_buf, frame_dlc);
 		}
 		break;
@@ -663,7 +627,7 @@ netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE frame_dlc)
 		{
 			clear_network();
 			if (nwl_st == NWL_RECV)
-				N_USData.indication(recv_buf, recv_len, N_UNEXP_PDU);
+				N_USData_indication(recv_buf, recv_len, N_UNEXP_PDU);
 
 			if (recv_firstframe(frame_buf, frame_dlc) > 0)
 				nwl_st = NWL_RECV;
@@ -703,8 +667,7 @@ netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE frame_dlc)
 * returns:
 *     void
 */
-extern void
-netowrk_send_udsmsg(BYTE msg_buf[], WORD msg_dlc)
+void CUdsNetwork::netowrk_send_udsmsg(BYTE msg_buf[], WORD msg_dlc)
 {
 
 	if (msg_dlc == 0 || msg_dlc > UDS_FF_DL_MAX) return;
@@ -720,20 +683,4 @@ netowrk_send_udsmsg(BYTE msg_buf[], WORD msg_dlc)
 	}
 }
 
-/**
-* netowrk_reg_usdata - reg usdata Function
-*
-* @usdata : uds msg data Function struct
-*
-* returns:
-*     0 - ok, other - err
-*/
-extern int
-netowrk_reg_usdata(nt_usdata_t usdata)
-{
-	if (usdata.ffindication == NULL || usdata.indication == NULL || usdata.confirm == NULL) return -1;
-
-	N_USData = usdata;
-	return 0;
-}
 /****************EOF****************/

@@ -7,9 +7,10 @@
 \description   uds client code, request service throngh can and deal the response
 *******************************************************************************/
 #include "stdafx.h"
-#include "NetworkLayer.h"
 #include "UdsClient.h"
-#include "RdWrData.h"
+#include "ControlCAN.h"
+#include "MFCUdsTestTool.h"
+#include "MFCUdsTestToolDlg.h"
 
 
 /*******************************************************************************
@@ -33,14 +34,15 @@ Function  declaration
 *******************************************************************************/
 
 
-BYTE RspData[BUF_LEN];
-UINT RspDlc;
-BOOL GetRsp;
-BYTE ReqSid;
-BYTE RspSid;
+CUdsClient::CUdsClient() : CUdsNetwork()
+{
+}
 
-/* uds user layer timer */
-static UINT uds_timer[UDS_TIMER_CNT] = { 0 };
+
+CUdsClient::~CUdsClient()
+{
+}
+
 
 /**
 * uds_timer_start - start uds timer
@@ -50,8 +52,7 @@ static UINT uds_timer[UDS_TIMER_CNT] = { 0 };
 * returns:
 *     void
 */
-static void
-uds_timer_start(BYTE num)
+void CUdsClient::uds_timer_start(BYTE num)
 {
 	if (num >= UDS_TIMER_CNT) return;
 
@@ -61,8 +62,7 @@ uds_timer_start(BYTE num)
 		uds_timer[UDS_TIMER_S3server] = TIMEOUT_S3server;
 }
 
-static void
-uds_timer_stop(BYTE num)
+void CUdsClient::uds_timer_stop(BYTE num)
 {
 	if (num >= UDS_TIMER_CNT) return;
 
@@ -77,8 +77,7 @@ uds_timer_stop(BYTE num)
 * returns:
 *     0 - timer is not running, 1 - timer is running, -1 - a timeout occur
 */
-static int
-uds_timer_run(BYTE num)
+int CUdsClient::uds_timer_run(BYTE num)
 {
 	if (num >= UDS_TIMER_CNT) return 0;
 
@@ -108,8 +107,7 @@ uds_timer_run(BYTE num)
 * returns:
 *     0 - timer is not running, 1 - timer is running,
 */
-static INT
-uds_timer_chk(BYTE num)
+INT CUdsClient::uds_timer_chk(BYTE num)
 {
 	if (num >= UDS_TIMER_CNT) return 0;
 
@@ -121,21 +119,20 @@ uds_timer_chk(BYTE num)
 
 
 /**
-* uds_dataff_indication - uds first frame indication callbacl
+* N_USData_ffindication - uds first frame indication callbacl
 *
 * @msg_dlc : first frame dlc
 *
 * returns:
 *     void
 */
-static void
-uds_dataff_indication(WORD msg_dlc)
+void CUdsClient::N_USData_ffindication(WORD msg_dlc)
 {
 	uds_timer_stop(UDS_TIMER_S3server);
 }
 
 /**
-* uds_data_indication - uds data request indication callback,
+* N_USData_indication - uds data request indication callback,
 *
 * @msg_buf  :
 * @msg_dlc  :
@@ -145,8 +142,7 @@ uds_dataff_indication(WORD msg_dlc)
 *     void
 */
 
-static void
-uds_data_indication(BYTE msg_buf[], WORD msg_dlc, n_result_t n_result)
+void CUdsClient::N_USData_indication(BYTE msg_buf[], WORD msg_dlc, n_result_t n_result)
 {
 	uds_timer_stop(UDS_TIMER_S3server);
 
@@ -169,60 +165,74 @@ uds_data_indication(BYTE msg_buf[], WORD msg_dlc, n_result_t n_result)
 
 
 /**
-* uds_data_confirm - uds response confirm
+* N_USData_confirm - uds response confirm
 *
 * @n_result :
 *
 * returns:
 *     void
 */
-static void
-uds_data_confirm(n_result_t n_result)
+void CUdsClient::N_USData_confirm(n_result_t n_result)
 {
 
 	uds_timer_start(UDS_TIMER_S3server);
 }
 
+/*******************************************************************************
+Function  Definition - common
+*******************************************************************************/
 
+void CUdsClient::ZTai_UDS_Send(BYTE CanData[], BYTE CanDlc)
+{
+
+	VCI_CAN_OBJ SendObj[1];
+
+	int FrameFormat, FrameType;
+	UINT i;
+
+	FrameFormat = FRMFMT_STD;
+	FrameType = FRMTYP_DAT;
+
+
+	SendObj->ExternFlag = FrameType;
+	SendObj->DataLen = CanDlc;
+	SendObj->RemoteFlag = FrameFormat;
+	if (FrameFormat == 1)//if remote frame, data area is invalid
+	for (i = 0; i<CanDlc; i++)
+	CanData[i] = 0;
+
+	SendObj->ID = theApp.m_Phyid;
+
+	for (i = 0; i<CanDlc; i++)
+	SendObj->Data[i] = CanData[i];
+
+	CMFCUdsTestToolDlg::TransmitCanmsg(SendObj);
+
+}
 /**
-* uds_client_main - uds main loop, should be schedule every 1 ms
+* main_loop - uds main loop, should be schedule every 1 ms
 *
 * @void  :
 *
 * returns:
 *     void
 */
-extern void
-uds_client_main(void)
+void CUdsClient::main_loop(void)
 {
 	network_main();
-
 }
 
+
+
 /**
-* uds_client_init - uds user layer init
+* sv_request - uds service request
 *
 * @void  :
 *
 * returns:
-*     0 - ok
+*     void
 */
-extern int
-uds_client_init(void)
-{
-	nt_usdata_t usdata;
-
-	usdata.ffindication = uds_dataff_indication;
-	usdata.indication = uds_data_indication;
-	usdata.confirm = uds_data_confirm;
-
-	return netowrk_reg_usdata(usdata);
-}
-
-
-
-extern void
-uds_client_request(BYTE SvcId, BYTE ReqBuf[], UINT ReqLen)
+void CUdsClient::request(BYTE SvcId, BYTE ReqBuf[], UINT ReqLen)
 {
 	BYTE cmd_buf[BUF_LEN];
 
@@ -240,7 +250,7 @@ uds_client_request(BYTE SvcId, BYTE ReqBuf[], UINT ReqLen)
 }
 
 
-UINT uds_get_rsp(BYTE DataBuf[], UINT BufLen)
+UINT CUdsClient::get_rsp(BYTE DataBuf[], UINT BufLen)
 {
 	/*
 	DWORD Ticks;
