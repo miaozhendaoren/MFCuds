@@ -38,6 +38,7 @@ void CCanCommDlg::DoDataExchange(CDataExchange* pDX)
 
 	DDX_Text(pDX, IDC_EDIT_CANTX, m_Editcantx);
 	DDX_Text(pDX, IDC_EDIT_CANID, m_EditCanid);
+	DDX_Text(pDX, IDC_EDIT_PRINT, m_Editprint);
 }
 
 
@@ -286,4 +287,12 @@ void CCanCommDlg::InsertItem(INT Dire, VCI_CAN_OBJ * pCanObj)
 	m_List.SetItemText(JustnowItem, 8, str);
 	m_List.Scroll(size);
 	//发送信息列表显示完毕
+}
+
+
+void CCanCommDlg::PrintLog(UINT LogColor, CString LogContent)
+{
+	m_Editprint += LogContent;
+	m_Editprint += _T("\r\n");
+	UpdateData(FALSE);//更新数据
 }

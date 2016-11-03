@@ -117,3 +117,48 @@ LONG UdsUtil::str2HEX(PBYTE src_str, PBYTE dst_buf)
 
 	return dst_pos + 1;
 }
+
+UINT UdsUtil::seedTOKey(UINT Seed)
+{
+	BYTE i;
+	UINT key;
+	key = UNLOCKKEY;
+	if (!((Seed == UNLOCKSEED)
+		|| (Seed == UNDEFINESEED)))
+	{
+		for (i = 0; i < 35; i++)
+		{
+			if (Seed & SEEDMASK)
+			{
+				Seed = Seed << SHIFTBIT;
+				Seed = Seed ^ ALGORITHMASK;
+			}
+			else
+			{
+				Seed = Seed << SHIFTBIT;
+			}
+		}
+		key = Seed;
+	}
+	return key;
+}
+
+
+void UdsUtil::KeyCalcu(PBYTE SeedBuf, PBYTE KeyBuf)
+{
+	UINT Seed;
+	UINT Key;
+	Seed = 0;
+	Seed |= ((UINT)SeedBuf[0]) << 24;
+	Seed |= ((UINT)SeedBuf[1]) << 16;
+	Seed |= ((UINT)SeedBuf[2]) << 8;
+	Seed |= ((UINT)SeedBuf[3]) << 0;
+
+	Key = seedTOKey(Seed);
+
+
+	KeyBuf[0] = (Key >> 24) & 0xff;
+	KeyBuf[1] = (Key >> 16) & 0xff;
+	KeyBuf[2] = (Key >> 8) & 0xff;
+	KeyBuf[3] = (Key >> 0) & 0xff;
+}

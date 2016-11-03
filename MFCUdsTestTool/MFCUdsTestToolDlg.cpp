@@ -226,20 +226,25 @@ void CMFCUdsTestToolDlg::OnMenuOpendev()
 {
 	// TODO: 在此添加命令处理程序代码
 	COpenDevDlg  Dlg;
+
+	m_CanComm.PrintLog(0, _T(">>Open Can Device"));
 	Dlg.DoModal();
+
+	m_CanComm.PrintLog(0, _T("      Done"));
 }
 
 void CMFCUdsTestToolDlg::OnMenuClosedev()
 {
+	m_CanComm.PrintLog(0, _T(">>Close Can Device"));
 	// TODO: 在此添加命令处理程序代码
 	if (VCI_CloseDevice(VCI_USBCAN2, CAN_DEVINDEX) != 1)
 	{
-		MessageBox(_T("Close failed！"));
+		m_CanComm.PrintLog(0, _T("      Fail"));
 		return;
 
 	}
 
-	MessageBox(_T("Close successful!"));
+	m_CanComm.PrintLog(0, _T("      Done"));
 }
 
 void CMFCUdsTestToolDlg::OnMenuRdid()

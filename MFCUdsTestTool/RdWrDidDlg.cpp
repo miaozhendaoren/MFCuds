@@ -49,6 +49,7 @@ CRdWrDidDlg::CRdWrDidDlg(CWnd* pParent /*=NULL*/)
 
 CRdWrDidDlg::~CRdWrDidDlg()
 {
+	m_CmdList.RemoveAll();
 }
 
 void CRdWrDidDlg::DoDataExchange(CDataExchange* pDX)
@@ -56,6 +57,7 @@ void CRdWrDidDlg::DoDataExchange(CDataExchange* pDX)
 	CDialogEx::DoDataExchange(pDX);
 
 	DDX_Control(pDX, IDC_LIST_RDWRDID, m_list);
+	DDX_Text(pDX, IDC_EDIT_WRRST, m_WrResult);
 }
 
 
@@ -76,7 +78,7 @@ BOOL CRdWrDidDlg::OnInitDialog()
 	CDialogEx::OnInitDialog();
 
 	// TODO:  在此添加额外的初始化
-
+	SetTimer(1, TIMOUT_MS, NULL);
 	m_list.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_CHECKBOXES | LVS_EX_GRIDLINES);
 
 	m_list.InsertColumn(0, _T("Name"));
@@ -94,9 +96,12 @@ BOOL CRdWrDidDlg::OnInitDialog()
 	CString str;
 	CString str1;
 
+
+	m_GetRspCnt = 0;
+
 	nItem = -1;
 	nSubItem = -1;
-	SetTim = FALSE;
+	m_GetRsp = FALSE;
 	GetInput = FALSE;
 
 	::ShowWindow(::GetDlgItem(m_hWnd, IDC_EDIT_RDWRDID), SW_HIDE);
@@ -141,47 +146,68 @@ BOOL CRdWrDidDlg::OnInitDialog()
 		}
 	}
 
-
 	return TRUE;  // return TRUE unless you set the focus to a control
 				  // 异常: OCX 属性页应返回 FALSE
 }
 
-
 void CRdWrDidDlg::OnBnClickedBtRddid()
 {
 	// TODO: 在此添加控件通知处理程序代码
-
-	BYTE SesBuf[BUF_LEN];
+	m_WrResult = _T("");
+	m_WrResult += _T("Write");
+	UpdateData(false);//更新控件数据
+#if 0
+	BYTE PreBuf[BUF_LEN];
 	BYTE DidBuf[BUF_LEN];
 	UINT DidLen;
 	UINT listrow = 0;
 
+	BYTE DataBuf[BUF_LEN];
+	UINT readlen;
 
-	SesBuf[0] = 0x03;
-	theApp.UdsClient.request(SID_10, SesBuf, 1);
-	Sleep(50);
+	PreBuf[0] = 0x03;
+	theApp.UdsClient.request(SID_10, PreBuf, 1);
+	Sleep(100);
+	readlen = theApp.UdsClient.get_rsp(DataBuf, BUF_LEN);
+	if (readlen == 0) return;
 
-	DidLen = 0;
 	if (RdWr == EmRd)
 	{
 		for (listrow = 0; listrow < RWDATA_CNT; listrow++)
 		{
+			DidLen = 0;
 			if (m_list.GetCheck(listrow))
 			{
 				DidBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 8);
 				DidBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 0);
 
 				theApp.UdsClient.request(SID_22, DidBuf, DidLen);
-				SetTimer(1, 100, NULL);
-				SetTim = TRUE;
+				SetTimer(1, TIMOUT_MS, NULL);
+				m_GetRsp = TRUE;
 				break;
 			}
 		}
 	}
 	else
 	{
+		//Request seed
+		PreBuf[0] = 0x01;
+		theApp.UdsClient.request(SID_27, PreBuf, 1);
+		Sleep(200);
+		readlen = theApp.UdsClient.get_rsp(DataBuf, BUF_LEN);
+		if (readlen != 6 || DataBuf[1] != 0x01) return;
+
+		//Send key
+		PreBuf[0] = 0x02;
+		UdsUtil::KeyCalcu(&DataBuf[2], &PreBuf[1]);
+		theApp.UdsClient.request(SID_27, PreBuf, 5);
+		Sleep(100);
+		readlen = theApp.UdsClient.get_rsp(DataBuf, BUF_LEN);
+		if (readlen != 2 || DataBuf[1] != 0x02) return;
+
 		for (listrow = 0; listrow < RWDATA_CNT; listrow++)
 		{
+			DidLen = 0;
 			if (m_list.GetCheck(listrow))
 			{
 				DidBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 8);
@@ -194,8 +220,72 @@ void CRdWrDidDlg::OnBnClickedBtRddid()
 				}
 
 				theApp.UdsClient.request(SID_2E, DidBuf, DidLen);
-				SetTimer(1, 100, NULL);
-				SetTim = TRUE;
+				SetTimer(1, TIMOUT_MS, NULL);
+				m_GetRsp = TRUE;
+				break;
+			}
+		}
+	}
+#endif
+	UdsCmd CmdNew;
+	UINT DidLen;
+	UINT listrow = 0;
+
+	//Push Session request cmd
+	CmdNew.SID = SID_10;
+	CmdNew.CmdBuf[0] = 0x03;
+	CmdNew.CmdLen = 1;
+	m_CmdList.Add(CmdNew);
+
+	if (RdWr == EmRd)
+	{
+		for (listrow = 0; listrow < RWDATA_CNT; listrow++)
+		{
+			DidLen = 0;
+			CmdNew.SID = SID_22;
+			if (m_list.GetCheck(listrow))
+			{
+				CmdNew.CmdBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 8);
+				CmdNew.CmdBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 0);
+
+				CmdNew.CmdLen = DidLen;
+				m_CmdList.Add(CmdNew);
+				break;
+			}
+		}
+	}
+	else
+	{
+
+		//Push request seed cmd
+		CmdNew.SID = SID_27;
+		CmdNew.CmdBuf[0] = 0x01;
+		CmdNew.CmdLen = 1;
+		m_CmdList.Add(CmdNew);
+
+		//Push send key cmd
+		CmdNew.SID = SID_27;
+		CmdNew.CmdBuf[0] = 0x02;
+		CmdNew.CmdLen = 5;
+		m_CmdList.Add(CmdNew);
+
+		for (listrow = 0; listrow < RWDATA_CNT; listrow++)
+		{
+			DidLen = 0;
+			CmdNew.SID = SID_2E;
+			if (m_list.GetCheck(listrow))
+			{
+				CmdNew.CmdBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 8);
+				CmdNew.CmdBuf[DidLen++] = (BYTE)(rwdata_list[listrow].did >> 0);
+
+				int i;
+				for (i = 0; i < rwdata_list[listrow].dlc; i++)
+				{
+					CmdNew.CmdBuf[DidLen++] = rwdata_list[listrow].p_data[i];
+				}
+
+				CmdNew.CmdLen = DidLen;
+				m_CmdList.Add(CmdNew);
 				break;
 			}
 		}
@@ -206,6 +296,7 @@ void CRdWrDidDlg::OnBnClickedBtRddid()
 void CRdWrDidDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
+#if 0
 	BYTE DataBuf[BUF_LEN];
 	UINT readlen;
 	UINT remnpos;
@@ -217,15 +308,15 @@ void CRdWrDidDlg::OnTimer(UINT_PTR nIDEvent)
 	CString str;
 	CString str1;
 
-	if (SetTim == TRUE)
+	if (m_GetRsp == TRUE)
 	{
-		SetTim = FALSE;
+		m_GetRsp = FALSE;
 		readlen = theApp.UdsClient.get_rsp(DataBuf, BUF_LEN);
 
 		if (RdWr == EmRd)
 		{
 			remnpos = 1;
-			while (remnpos <= readlen)
+			while (remnpos < readlen)
 			{
 				curr_did = DataBuf[remnpos + 1];
 				curr_did |= ((WORD)DataBuf[remnpos]) << 8;
@@ -260,6 +351,107 @@ void CRdWrDidDlg::OnTimer(UINT_PTR nIDEvent)
 			if (readlen > 0)
 				MessageBox(_T("write did get response\n"));
 		}
+	}
+#endif
+	BYTE DataBuf[BUF_LEN];
+	UINT readlen;
+	UINT remnpos;
+
+	WORD curr_did;
+	UINT listrow = 0;
+	UINT did_n;
+
+	CString str;
+	CString str1;
+
+	if (m_GetRsp == TRUE)
+	{
+		readlen = theApp.UdsClient.get_rsp(DataBuf, BUF_LEN);
+
+		if (readlen > 0)
+		{
+			m_GetRsp = FALSE;
+
+			switch (m_CmdNow.SID)
+			{
+				case SID_22:
+				{
+					remnpos = 1;
+					while (remnpos < readlen)
+					{
+						curr_did = DataBuf[remnpos + 1];
+						curr_did |= ((WORD)DataBuf[remnpos]) << 8;
+
+						for (did_n = 0; did_n < RWDATA_CNT; did_n++)
+						{
+							if (rwdata_list[did_n].did == curr_did)
+							{
+		
+								remnpos += 2;
+								UINT i;
+								for (i = 0; i < rwdata_list[did_n].dlc; i++)
+								{
+									str1.Format(_T("%02X"), DataBuf[remnpos + i]);
+									str += str1;
+								}
+								remnpos += rwdata_list[did_n].dlc;
+								listrow = did_n;
+								m_list.SetItemText(listrow, 3, str);
+								break;
+							}
+						}
+						break;
+					}
+				}
+				break;
+				case SID_2E:
+					m_RspBuf[0] = DataBuf[0];
+					m_RspBuf[1] = DataBuf[1];
+					m_WrResult = _T("");
+					m_WrResult += _T("Success");
+					UpdateData(false);//更新控件数据
+				break;
+				case SID_27:
+				{
+					if (readlen == 6 && DataBuf[1] == 0x01)
+					{
+						m_RspBuf[0] = DataBuf[2];
+						m_RspBuf[1] = DataBuf[3];
+						m_RspBuf[2] = DataBuf[4];
+						m_RspBuf[3] = DataBuf[5];
+					}
+				}
+				break;
+				case SID_10:
+				default:
+				break;
+			}
+
+		}
+		else
+		{
+			m_GetRspCnt++;
+			if (m_GetRspCnt >= GETRSP_CNT)
+			{
+				m_GetRsp = FALSE;
+			}
+		}
+	}
+	else
+	{
+		INT CmdSize = m_CmdList.GetSize();
+		if (CmdSize <= 0) return;
+		m_CmdNow = m_CmdList[0];
+		m_CmdList.RemoveAt(0, 1);
+		if (m_CmdNow.SID == SID_27 && m_CmdNow.CmdBuf[0] == 0x02)
+		{
+			UdsUtil::KeyCalcu(m_RspBuf, &m_CmdNow.CmdBuf[1]);
+		}
+		if (m_CmdNow.SID == SID_2E)
+			m_RspBuf[0] = 1;
+		theApp.UdsClient.request(m_CmdNow.SID, m_CmdNow.CmdBuf, m_CmdNow.CmdLen);
+		m_GetRsp = TRUE;
+		m_GetRspCnt = 0;
 	}
 
 	CDialogEx::OnTimer(nIDEvent);

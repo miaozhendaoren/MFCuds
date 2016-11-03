@@ -30,7 +30,7 @@ private:
 
 	BOOL m_CanExt;
 	BOOL m_CanRmt;
-
+	CString m_Editprint;
 public:
 	afx_msg void OnBnClickedCheckRecv();
 	afx_msg void OnBnClickedButtonTx();
@@ -38,4 +38,5 @@ public:
 	virtual BOOL OnInitDialog();
 	// Insert a Can msg to list
 	void InsertItem(INT Dire, VCI_CAN_OBJ * pCanObj);
+	void PrintLog(UINT LogColor, CString LogContent);
 };

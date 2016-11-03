@@ -509,7 +509,7 @@ void CUdsNetwork::send_multipleframe(BYTE msg_buf[], WORD msg_dlc)
 
 	if (msg_dlc < UDS_FF_DL_MIN || msg_dlc > UDS_FF_DL_MAX) return;
 
-	for (i = 0; i < UDS_FF_DL_MAX; i++)
+	for (i = 0; i < msg_dlc; i++)
 		remain_buf[i] = msg_buf[i];
 
 	g_xcf_sn = 0;
@@ -549,6 +549,7 @@ void CUdsNetwork::network_main(void)
 		g_xcf_sn++;
 		if (g_xcf_sn > 0x0f)
 			g_xcf_sn = 0;
+		m_CriticalSection.Lock();
 		send_len = send_consecutiveframe(&remain_buf[remain_pos], remain_len, g_xcf_sn);
 		remain_pos += send_len;
 		remain_len -= send_len;
@@ -580,6 +581,7 @@ void CUdsNetwork::network_main(void)
 		{
 			clear_network();
 		}
+		m_CriticalSection.Unlock();
 	}
 }
 /**
@@ -603,6 +605,7 @@ void CUdsNetwork::netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE fram
 					  * smaller than expected shall be ignored by the
 					  * network layer without any further action
 					  */
+
 	if (frame_dlc != UDS_VALID_FRAME_LEN) return;
 
 	if (func_addr == 0)
@@ -610,6 +613,7 @@ void CUdsNetwork::netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE fram
 	else
 		g_tatype = N_TATYPE_FUNCTIONAL;
 
+	m_CriticalSection.Lock();
 	pci_type = NT_GET_PCI_TYPE(frame_buf[0]);
 	switch (pci_type)
 	{
@@ -656,6 +660,7 @@ void CUdsNetwork::netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE fram
 	default:
 		break;
 	}
+	m_CriticalSection.Unlock();
 }
 
 /**
@@ -669,7 +674,7 @@ void CUdsNetwork::netowrk_recv_frame(BYTE func_addr, BYTE frame_buf[], BYTE fram
 */
 void CUdsNetwork::netowrk_send_udsmsg(BYTE msg_buf[], WORD msg_dlc)
 {
-
+	int tst;
 	if (msg_dlc == 0 || msg_dlc > UDS_FF_DL_MAX) return;
 
 	if (msg_dlc < UDS_SF_DL_MAX)

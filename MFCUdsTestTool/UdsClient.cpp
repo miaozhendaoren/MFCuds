@@ -151,7 +151,8 @@ void CUdsClient::N_USData_indication(BYTE msg_buf[], WORD msg_dlc, n_result_t n_
 		uds_timer_start(UDS_TIMER_S3server);
 		return;
 	}
-
+	if (msg_buf[0] == 0x6E)
+		RspData[20] = 0x11;
 	RspSid = msg_buf[0] - 0x40;
 	if (RspSid != ReqSid)
 		return;
@@ -252,17 +253,14 @@ void CUdsClient::request(BYTE SvcId, BYTE ReqBuf[], UINT ReqLen)
 
 UINT CUdsClient::get_rsp(BYTE DataBuf[], UINT BufLen)
 {
-	/*
-	DWORD Ticks;
+	/*DWORD Ticks;
 	Ticks = GetTickCount();
-
 	while (GetRsp == FALSE)
 	{
 		if ((GetTickCount() - Ticks) >= 2000)
 			break;
 		Sleep(200);
-	}
-	*/
+	}*/
 
 	if (GetRsp == TRUE)
 	{

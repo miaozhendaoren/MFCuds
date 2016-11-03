@@ -78,6 +78,8 @@ private:
 	WORD recv_len;
     WORD recv_fdl;  /* frame data len */
 
+	CCriticalSection m_CriticalSection;
+
 public:
 	BYTE g_tatype;
 

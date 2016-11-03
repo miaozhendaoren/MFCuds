@@ -1,5 +1,18 @@
 #pragma once
 #include "ColoredListCtrl.h"
+#include <afxtempl.h>
+#include <queue>
+
+typedef struct
+{
+	UINT SID;
+	UINT CmdLen; // The unit is millisecond
+	BYTE CmdBuf[BUF_LEN];
+}UdsCmd, *PUdsCmd;
+
+#define GETRSP_MS 2000
+#define TIMOUT_MS 100
+#define GETRSP_CNT (GETRSP_MS/TIMOUT_MS)
 
 // CReadDidDlg ¶Ô»°¿ò
 
@@ -24,7 +37,18 @@ protected:
 private:
 	CColoredListCtrl m_list;
 	BOOL SetTim;
+	CString m_WrResult;
 public:
+
+	BYTE m_Step;
+	BOOL m_Rdwr;
+
+    CArray<UdsCmd> m_CmdList;
+	UdsCmd m_CmdNow;
+	BOOL m_GetRsp;
+	BYTE m_GetRspCnt;
+	BYTE m_RspBuf[4];
+
 	enum { EmRd = 0, EmWr = 1 };
 	BYTE RdWr;
 	int nItem, nSubItem;
@@ -36,6 +60,9 @@ public:
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnLvnItemchangedListRdid(NMHDR *pNMHDR, LRESULT *pResult);
 	afx_msg void OnNMDblclkListRdid(NMHDR *pNMHDR, LRESULT *pResult);
+
+	static UINT UdsRdwrThread(void *param);
+
 	// shis function inserts the default values into the listControl
 	void InsertItems();
 	// this function will returns the item text depending on the item and SubItem Index
